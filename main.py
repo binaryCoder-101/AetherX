@@ -1,6 +1,7 @@
-def main():
-    print("Hello from aetherx!")
+from fastapi import FastAPI
 
+app = FastAPI()
 
-if __name__ == "__main__":
-    main()
+@app.get("/")
+def home():
+    return {"message": "Hello world! This is the entry point of out API!"}
