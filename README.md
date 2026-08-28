@@ -1,12 +1,12 @@
 # AetherX
 
-A full-stack microblogging platform built with **FastAPI**.
+A microblogging platform built with **FastAPI**.
 
-AetherX provides a clean JSON API and a responsive HTML frontend for creating, reading, updating, and managing blog posts with user authentication and profile images.
+You can create, read, update, and manage your blog posts with user authentication and profile images.
 
 AetherX has:
 - A JSON REST API for programmatic access
-- An simple HTML frontend with Jinja2 templates for basic UI access
+- An simple HTML frontend with Jinja2 templates for UI 
 
 ---
 
