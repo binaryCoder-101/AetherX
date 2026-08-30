@@ -1,7 +1,10 @@
 from fastapi import FastAPI, Request
 from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 
 app = FastAPI()
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 templates = Jinja2Templates(directory="templates")
 
@@ -30,3 +33,15 @@ def home(req: Request):
 @app.get("/api/posts")
 def get_posts():
     return posts
+
+@app.get("/account", name="account_page", include_in_schema=False)
+def account(req: Request):
+    pass
+
+@app.get("/login", include_in_schema=False)
+def login_page(req: Request):
+    pass
+
+@app.get("/register", include_in_schema=False)
+def register_page(req: Request):
+    pass
