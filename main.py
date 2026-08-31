@@ -25,11 +25,7 @@ posts: list[dict] = [
     },
 ]
 
-@app.get("/", include_in_schema=False, name="home")
-@app.get("/posts", include_in_schema=False, name="posts")
-def home(req: Request):
-    return templates.TemplateResponse(req, "home.html", {"posts": posts, "title": "Home"},)
-
+# API ROUTES
 @app.get("/api/posts")
 def get_posts():
     return posts
@@ -40,6 +36,13 @@ def get_post(post_id: int):
         if post.get("id") == post_id:
             return post
     return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+
+
+# WEB ROUTES
+@app.get("/", include_in_schema=False, name="home")
+@app.get("/posts", include_in_schema=False, name="posts")
+def home(req: Request):
+    return templates.TemplateResponse(req, "home.html", {"posts": posts, "title": "Home"},)
 
 @app.get("/account", name="account_page", include_in_schema=False)
 def account(req: Request):
