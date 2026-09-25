@@ -1,14 +1,25 @@
-from fastapi import FastAPI, Request, status, HTTPException
+from typing import Annotated
+
+from fastapi import Depends, FastAPI, Request, status, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from schemas import PostCreate, PostResponse 
+
+import models
+from database import Base, engine, get_db
+from schemas import PostCreate, PostResponse, UserCreate, UserResponse
+
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+app.mount("/media", StaticFiles(directory="media"), name="media")
 
 templates = Jinja2Templates(directory="templates")
 
@@ -30,6 +41,48 @@ posts: list[dict] = [
 ]
 
 # API ROUTES
+
+# create new user
+@app.post(
+        "/api/users",
+        response_model=UserResponse,
+        status_code=status.HTTP_201_CREATED,
+)
+def create_user(user: UserCreate, db: Annotated[Session, Depends(get_db)]): #Dependency Injection
+    result = db.execute(
+        select(models.User).where(models.User.username == user.username),
+    )
+    existing_user = result.scalars().first()
+
+    if existing_user:
+        raise HTTPException(
+            status_code = status.HTTP_400_BAD_REQUEST,
+            detail = "Username already exists",
+        )
+
+    result = db.execute(
+        select(models.User).where(models.User.email == user.email),
+    )
+    existing_email = result.scalars().first()
+
+    if existing_email:
+        raise HTTPException(
+            status_code = status.HTTP_400_BAD_REQUEST,
+            detail = "Email already exists",
+        )
+
+    new_user = models.User(
+        username=user.username,
+        email=user.email,
+    )
+
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    return new_user
+
+# Get all posts
 @app.get(
         "/api/posts", 
         response_model=list[PostResponse]
@@ -37,6 +90,7 @@ posts: list[dict] = [
 def get_posts():
     return posts
 
+# Get a single post by post id
 @app.get(
         "/api/posts/{post_id}", 
         response_model=PostResponse
@@ -47,6 +101,7 @@ def get_post(post_id: int):
             return post
     return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
 
+# Create a new post
 @app.post(
         "/api/posts",
         response_model=PostResponse,
@@ -65,6 +120,8 @@ def create_post(post: PostCreate):
     return new_post
 
 # WEB ROUTES
+
+# Home page - returns all posts
 @app.get("/", include_in_schema=False, name="home")
 @app.get("/posts", include_in_schema=False, name="posts")
 def home(request: Request):
@@ -74,6 +131,7 @@ def home(request: Request):
         {"posts": posts, "title": "Home"},
     )
 
+# Single post page by post id
 @app.get("/posts/{post_id}")
 def post_page(request: Request, post_id: int):
     for post in posts:
@@ -86,19 +144,22 @@ def post_page(request: Request, post_id: int):
                 )
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
 
-
+# Account page
 @app.get("/account", name="account_page", include_in_schema=False)
 def account(req: Request):
     pass
 
+# Login page
 @app.get("/login", include_in_schema=False)
 def login_page(req: Request):
     pass
 
+# Register page
 @app.get("/register", include_in_schema=False)
 def register_page(req: Request):
     pass
 
+# HTTP Exception Handler
 @app.exception_handler(StarletteHTTPException)
 def general_http_exception_handler(request: Request, exception: StarletteHTTPException):
     message = (
@@ -124,6 +185,7 @@ def general_http_exception_handler(request: Request, exception: StarletteHTTPExc
         status_code=exception.status_code,
     )
 
+# Validation Exception Handler
 @app.exception_handler(RequestValidationError)
 def validation_exception_handler(request: Request, exception: RequestValidationError):
     if request.url.path.startswith("/api"):
