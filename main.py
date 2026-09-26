@@ -23,22 +23,22 @@ app.mount("/media", StaticFiles(directory="media"), name="media")
 
 templates = Jinja2Templates(directory="templates")
 
-posts: list[dict] = [
-    {
-        "id": 1,
-        "author": "Corey Schafer",
-        "title": "FastAPI is Awesome",
-        "content": "This framework is really easy to use and super fast.",
-        "date_posted": "April 20, 2026",
-    },
-    {
-        "id": 2,
-        "author": "Tony Stark",
-        "title": "Python is great for my servers!",
-        "content": "As you all might know, my personal servers at Stark tower are AI heavy. And hence, Python is particularly great language for running on my servers!",
-        "date_posted": "April 21, 2026",
-    },
-]
+# posts: list[dict] = [
+#     {
+#         "id": 1,
+#         "author": "Corey Schafer",
+#         "title": "FastAPI is Awesome",
+#         "content": "This framework is really easy to use and super fast.",
+#         "date_posted": "April 20, 2026",
+#     },
+#     {
+#         "id": 2,
+#         "author": "Tony Stark",
+#         "title": "Python is great for my servers!",
+#         "content": "As you all might know, my personal servers at Stark tower are AI heavy. And hence, Python is particularly great language for running on my servers!",
+#         "date_posted": "April 21, 2026",
+#     },
+# ]
 
 # API ROUTES
 
@@ -102,7 +102,7 @@ def get_user(user_id: int, db: Annotated[Session, Depends(get_db)]):
         status_code = status.HTTP_404_NOT_FOUND,
         detail = "User not found"
     )
-    
+
 # 3. get all posts by a user
 @app.get(
         "/api/users/{user_id}/posts",
@@ -125,59 +125,81 @@ def get_user_posts(user_id: int, db: Annotated[Session, Depends(get_db)]):
 # Post endpoints
 # 1. Get all posts
 @app.get(
-        "/api/posts", 
-        response_model=list[PostResponse]
+    "/api/posts", 
+    response_model=list[PostResponse]
 )
-def get_posts():
+def get_posts(db: Annotated[Session, Depends(get_db)]):
+    result = db.execute(select(models.Post))
+    posts = result.scalars().all()
     return posts
 
 # 2. Get a single post by post id
-@app.get(
-        "/api/posts/{post_id}", 
-        response_model=PostResponse
-)
-def get_post(post_id: int):
-    for post in posts:
-        if post.get("id") == post_id:
-            return post
-    return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+@app.get("/api/posts/{post_id}", response_model=PostResponse)
+def get_post(post_id: int, db: Annotated[Session, Depends(get_db)]):
+    result = db.execute(
+        select(models.Post).where(models.Post.id == post_id)
+    )
+    post = result.scalars().first()
+
+    if post:
+        return post
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Post not found",
+    )
 
 # 3. Create a new post
 @app.post(
-        "/api/posts",
-        response_model=PostResponse,
-        status_code=status.HTTP_201_CREATED,
+    "/api/posts",
+    response_model=PostResponse,
+    status_code=status.HTTP_201_CREATED,
 )
-def create_post(post: PostCreate):
-    new_id = max(p["id"] for p in posts) + 1 if posts else 1
-    new_post = {
-        "id": new_id,
-        "author": post.author,
-        "title": post.title,
-        "content": post.content,
-        "date_posted": "September 02, 2026"
-    }
-    posts.append(new_post)
+def create_post(post: PostCreate, db: Annotated[Session, Depends(get_db)]):
+    result = db.execute(
+        select(models.User).where(models.User.id == post.user_id)
+    )
+    user = result.scalars().first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    new_post = models.Post(
+        title=post.title,
+        content=post.content,
+        user_id=post.user_id,
+    )
+
+    db.add(new_post)
+    db.commit()
+    db.refresh(new_post)
+
     return new_post
 
 # WEB ROUTES
 
-# Home page - returns all posts
+# 1. Home page - returns all posts
 @app.get("/", include_in_schema=False, name="home")
 @app.get("/posts", include_in_schema=False, name="posts")
-def home(request: Request):
+def home(request: Request, db: Annotated[Session, Depends(get_db)]):
+    result = db.execute(select(models.Post))
+    posts = result.scalars().all()
     return templates.TemplateResponse(
         request, 
         "home.html", 
         {"posts": posts, "title": "Home"},
     )
 
-# Single post page by post id
-@app.get("/posts/{post_id}")
-def post_page(request: Request, post_id: int):
-    for post in posts:
-        if post.get("id") == post_id:
-            title = post["title"][:50]
+# 2. Single post page by post id
+@app.get("/posts/{post_id}", include_in_schema=False)
+def post_page(request: Request, post_id: int, db: Annotated[Session, Depends(get_db)]):
+    result = db.execute(select(models.Post).where(models.Post.id == post_id))
+    post = result.scalars().first()
+    if post:
+            title = post.title[:50]
             return templates.TemplateResponse(
                     request, 
                     "post.html", 
@@ -185,17 +207,43 @@ def post_page(request: Request, post_id: int):
                 )
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
 
-# Account page
+# 3. All posts of a user
+@app.get("/users/{user_id}/posts", include_in_schema=False, name="user_posts")
+def user_posts_page(
+    request: Request,
+    user_id: int,
+    db: Annotated[Session, Depends(get_db)],
+):
+    result = db.execute(select(models.User).where(models.User.id == user_id))
+    user = result.scalars().first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    result = db.execute(select(models.Post).where(models.Post.user_id == user_id))
+    posts = result.scalars().all()
+
+    return templates.TemplateResponse(
+        request,
+        "user_posts.html",
+        {"posts": posts, "user": user, "title": f"{user.username}'s Posts"},
+    )
+
+
+# 4. Account page
 @app.get("/account", name="account_page", include_in_schema=False)
 def account(req: Request):
     pass
 
-# Login page
+# 5. Login page
 @app.get("/login", include_in_schema=False)
 def login_page(req: Request):
     pass
 
-# Register page
+# 6. Register page
 @app.get("/register", include_in_schema=False)
 def register_page(req: Request):
     pass
