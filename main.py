@@ -42,26 +42,9 @@ posts: list[dict] = [
 
 # API ROUTES
 
-# get a single user by user id
-@app.get(
-        "/api/users/{user_id}",
-        response_model=UserResponse
-)
-def get_user(user_id: int, db: Annotated[Session, Depends(get_db)]):
-    result = db.execute(
-        select(models.User).where(models.User.id == user_id),
-    )
-    user = result.scalars().first()
+# User endpoints
 
-    if user:
-        return user
-    
-    raise HTTPException(
-        status_code = status.HTTP_404_NOT_FOUND,
-        detail = "User not found"
-    )
-
-# create new user
+# 1. create new user
 @app.post(
         "/api/users",
         response_model=UserResponse,
@@ -101,7 +84,46 @@ def create_user(user: UserCreate, db: Annotated[Session, Depends(get_db)]): #Dep
 
     return new_user
 
-# Get all posts
+# 2. get a single user by user id
+@app.get(
+        "/api/users/{user_id}",
+        response_model=UserResponse
+)
+def get_user(user_id: int, db: Annotated[Session, Depends(get_db)]):
+    result = db.execute(
+        select(models.User).where(models.User.id == user_id),
+    )
+    user = result.scalars().first()
+
+    if user:
+        return user
+    
+    raise HTTPException(
+        status_code = status.HTTP_404_NOT_FOUND,
+        detail = "User not found"
+    )
+    
+# 3. get all posts by a user
+@app.get(
+        "/api/users/{user_id}/posts",
+        response_model=list[PostResponse]
+)
+def get_user_posts(user_id: int, db: Annotated[Session, Depends(get_db)]):
+    pass
+    result = db.execute(select(models.User).where(models.User.id == user_id))
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    result = db.execute(select(models.Post).where(models.Post.user_id == user_id))
+    posts = result.scalars().all()
+    return posts
+
+# Post endpoints
+# 1. Get all posts
 @app.get(
         "/api/posts", 
         response_model=list[PostResponse]
@@ -109,7 +131,7 @@ def create_user(user: UserCreate, db: Annotated[Session, Depends(get_db)]): #Dep
 def get_posts():
     return posts
 
-# Get a single post by post id
+# 2. Get a single post by post id
 @app.get(
         "/api/posts/{post_id}", 
         response_model=PostResponse
@@ -120,7 +142,7 @@ def get_post(post_id: int):
             return post
     return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
 
-# Create a new post
+# 3. Create a new post
 @app.post(
         "/api/posts",
         response_model=PostResponse,
